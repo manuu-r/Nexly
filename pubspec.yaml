@@ -1,0 +1,48 @@
+name: nexly
+description: "A notification secretary that batches notifications into daily summaries."
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Icons
+  cupertino_icons: ^1.0.8
+
+  # Notification Listening
+  flutter_notification_listener: ^1.3.4
+
+  # Local Storage - Using Hive for lightweight, fast local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # AI Model Deployment (Cactus) - for future AI features
+  cactus: ^1.2.0
+
+  # Routing
+  go_router: ^17.0.0
+
+  # Deep Linking & App Launching
+  android_intent_plus: ^6.0.0
+
+  # Local Notifications (for daily summary trigger)
+  flutter_local_notifications: ^19.5.0
+
+  # Utilities
+  intl: ^0.20.1
+  shared_preferences: ^2.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
+
+flutter:
+  uses-material-design: true
