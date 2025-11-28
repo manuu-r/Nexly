@@ -2,64 +2,125 @@ import 'package:flutter/foundation.dart';
 import 'package:cactus/cactus.dart';
 
 /// Service for AI-powered notification summarization
-/// Currently configured for future use with lightweight models
+/// Configured to use Qwen 1.8B model for lightweight processing
 class CactusAIService {
   static CactusLM? _model;
+  static const String _modelSlug = 'gemma3-1b'; // NOTE: This is a guess based on the new API
 
-  /// Initialize Cactus with a lightweight model
-  /// Recommended models for 6GB RAM:
-  /// - Gemma 2B (gemma-2b-it-q4_0.gguf) - ~1.5GB RAM
-  /// - Qwen 1.8B (qwen1_8b-q4_0.gguf) - ~1GB RAM
-  /// - TinyLlama 1.1B (tinyllama-1.1b-q4_0.gguf) - ~700MB RAM
+  /// Initialize Cactus with the Gemma 3 1B model
+  /// Uses ~1GB RAM, optimized for mobile devices
   static Future<void> initialize() async {
     try {
-      // Example initialization (to be configured later)
-      // Download model first using CactusLM.downloadModel()
+      _model = CactusLM();
+      // Download gemma-3-1b model if not already present
+      await _model!.downloadModel(model: _modelSlug);
 
-      // _model = await CactusLM.create(
-      //   modelPath: 'path/to/gemma-2b-it-q4_0.gguf',
-      //   maxTokens: 512,
-      //   temperature: 0.7,
-      // );
+      // Initialize the model with mobile-optimized settings
+      await _model!.initializeModel(
+        params: CactusInitParams(
+          model: _modelSlug,
+          contextSize: 2048, // Smaller context for efficiency
+        ),
+      );
 
-      debugPrint('Cactus AI service initialized (placeholder)');
+      debugPrint('Cactus AI service initialized with gemma-3-1b');
     } catch (e) {
       debugPrint('Error initializing Cactus: $e');
     }
   }
 
-  /// Summarize notifications using AI (future feature)
+  static Future<String> runTestPrompt({
+    String prompt = 'Summarize the following in one sentence: Today I received several messages about meetings, a delivery, and a reminder to pay a bill.',
+  }) async {
+    if (_model == null) {
+      return 'AI not initialized. Call initialize() first.';
+    }
+
+    try {
+      final testPrompt = '''You are a helpful assistant that responds concisely.
+Respond to the prompt below in 2 words exactly.
+
+Prompt:
+$prompt
+
+Keep the response short and clear.''';
+
+      final result = await _model!.generateCompletion(
+        messages: [ChatMessage(content: testPrompt, role: 'user')],
+        params: CactusCompletionParams(
+          maxTokens: 256,
+          temperature: 0.7,
+        ),
+      );
+
+      if (result.success) {
+        debugPrint('Cactus test prompt completed: ${result.toString()}');
+        return result.response.trim();
+      } else {
+        debugPrint('Error running test prompt: generation failed');
+        return 'Error running test prompt.';
+      }
+    } catch (e) {
+      debugPrint('Error running test prompt: $e');
+      return 'Error running test prompt.';
+    }
+  }
+
+  /// Summarize notifications using Qwen 1.8B AI model
   static Future<String> summarizeNotifications(
     List<String> notifications,
   ) async {
     if (_model == null) {
-      return 'AI summarization not configured yet';
+      return 'AI summarization not initialized. Please call initialize() first.';
+    }
+
+    if (notifications.isEmpty) {
+      return 'No notifications to summarize.';
     }
 
     try {
-      // TODO: Implement when Cactus API is stable
-      // final prompt = '''
-      // Summarize the following notifications briefly:
-      // ${notifications.join('\n')}
-      // Summary:''';
-      // final response = await _model!.generate(prompt);
+      final prompt = '''You are a helpful assistant that summarizes notifications concisely.
 
-      debugPrint(
-        'Summarization requested for ${notifications.length} notifications',
+Notifications:
+${notifications.take(10).join('\n')} ${notifications.length > 10 ? '\n... and ${notifications.length - 10} more' : ''}
+
+Provide a brief, helpful summary in 1-2 sentences:''';
+
+      final result = await _model!.generateCompletion(
+        messages: [ChatMessage(content: prompt, role: 'user')],
+        params: CactusCompletionParams(
+          maxTokens: 256,
+          temperature: 0.7,
+        ),
       );
-      return 'AI summarization coming soon';
+
+      if (result.success) {
+        debugPrint('Generated summary for ${notifications.length} notifications');
+        return result.response.trim();
+      } else {
+        debugPrint('Error generating summary: generation failed');
+        return 'Unable to generate summary at this time.';
+      }
     } catch (e) {
       debugPrint('Error generating summary: $e');
-      return 'Failed to generate summary';
+      return 'Unable to generate summary at this time.';
     }
   }
 
-  /// Dispose the model when done
-  static Future<void> dispose() async {
-    // TODO: Implement when Cactus API is stable
-    // await _model?.dispose();
-    _model = null;
+  /// Dispose the model when done to free up resources
+  static void dispose() {
+    try {
+      _model?.unload();
+      _model = null;
+      debugPrint('Cactus AI service disposed');
+    } catch (e) {
+      debugPrint('Error disposing Cactus: $e');
+      _model = null;
+    }
   }
+
+  /// Check if the service is initialized and ready to use
+  static bool get isInitialized => _model != null;
 }
 
 /// Recommended model configurations for low-resource devices (6GB RAM):

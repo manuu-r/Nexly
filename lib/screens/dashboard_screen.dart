@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_notification_listener/flutter_notification_listener.dart';
+import '../services/cactus_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -107,6 +108,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () => context.push('/summary'),
               icon: const Icon(Icons.list),
               label: const Text('View Summary'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: const Text('Test AI Model'),
+                      content: SizedBox(
+                        width: double.maxFinite,
+                        child: FutureBuilder<String>(
+                          future: CactusAIService.runTestPrompt(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState != ConnectionState.done) {
+                              return const SizedBox(
+                                height: 100,
+                                child: Center(child: CircularProgressIndicator()),
+                              );
+                            }
+                            if (snapshot.hasError) {
+                              return Text('Error: ${snapshot.error}');
+                            }
+                            return SingleChildScrollView(
+                              child: Text(snapshot.data ?? 'No response'),
+                            );
+                          },
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Close'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
+              icon: const Icon(Icons.psychology),
+              label: const Text('Test AI Model'),
             ),
             const SizedBox(height: 32),
             Expanded(

@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'models/notification_item.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/summary_screen.dart';
+import 'services/cactus_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,7 +13,7 @@ void main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(NotificationItemAdapter());
   await Hive.openBox<NotificationItem>('notifications');
-
+  await CactusAIService.initialize();
   runApp(const NexlyApp());
 }
 
