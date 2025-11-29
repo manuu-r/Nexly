@@ -54,6 +54,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Nexly Dashboard'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => context.push('/settings'),
+            tooltip: 'Settings',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -122,10 +129,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: FutureBuilder<String>(
                           future: CactusAIService.runTestPrompt(),
                           builder: (context, snapshot) {
-                            if (snapshot.connectionState != ConnectionState.done) {
+                            if (snapshot.connectionState !=
+                                ConnectionState.done) {
                               return const SizedBox(
                                 height: 100,
-                                child: Center(child: CircularProgressIndicator()),
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               );
                             }
                             if (snapshot.hasError) {

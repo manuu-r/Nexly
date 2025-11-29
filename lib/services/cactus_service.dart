@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:cactus/cactus.dart';
+import 'openrouter_service.dart';
 
 /// Service for AI-powered notification summarization
-/// Configured to use Qwen 1.8B model for lightweight processing
+/// Hybrid approach: Tries local Cactus model first, falls back to OpenRouter cloud API
 class CactusAIService {
   static CactusLM? _model;
-  static const String _modelSlug = 'gemma3-1b'; // NOTE: This is a guess based on the new API
+  static const String _modelSlug =
+      'gemma3-1b'; // NOTE: This is a guess based on the new API
 
   /// Initialize Cactus with the Gemma 3 1B model
   /// Uses ~1GB RAM, optimized for mobile devices
@@ -30,14 +32,16 @@ class CactusAIService {
   }
 
   static Future<String> runTestPrompt({
-    String prompt = 'Summarize the following in one sentence: Today I received several messages about meetings, a delivery, and a reminder to pay a bill.',
+    String prompt =
+        'Summarize the following in one sentence: Today I received several messages about meetings, a delivery, and a reminder to pay a bill.',
   }) async {
     if (_model == null) {
       return 'AI not initialized. Call initialize() first.';
     }
 
     try {
-      final testPrompt = '''You are a helpful assistant that responds concisely.
+      final testPrompt =
+          '''You are a helpful assistant that responds concisely.
 Respond to the prompt below in 2 words exactly.
 
 Prompt:
@@ -47,10 +51,7 @@ Keep the response short and clear.''';
 
       final result = await _model!.generateCompletion(
         messages: [ChatMessage(content: testPrompt, role: 'user')],
-        params: CactusCompletionParams(
-          maxTokens: 256,
-          temperature: 0.7,
-        ),
+        params: CactusCompletionParams(maxTokens: 256, temperature: 0.7),
       );
 
       if (result.success) {
@@ -66,20 +67,54 @@ Keep the response short and clear.''';
     }
   }
 
-  /// Summarize notifications using Qwen 1.8B AI model
+  /// Summarize notifications using hybrid approach
+  /// First tries local Cactus model, falls back to OpenRouter if local fails
   static Future<String> summarizeNotifications(
     List<String> notifications,
   ) async {
-    if (_model == null) {
-      return 'AI summarization not initialized. Please call initialize() first.';
-    }
-
     if (notifications.isEmpty) {
       return 'No notifications to summarize.';
     }
 
+    // Try local Cactus first if initialized
+    if (isInitialized) {
+      try {
+        debugPrint('Attempting local Cactus summarization...');
+        final localSummary = await _summarizeWithLocalModel(notifications);
+
+        // If we got a valid summary (not an error message), return it
+        if (localSummary != null &&
+            !localSummary.contains('Unable to generate') &&
+            !localSummary.contains('Error')) {
+          debugPrint('Local Cactus summarization successful');
+          return localSummary;
+        }
+      } catch (e) {
+        debugPrint('Local Cactus failed: $e, falling back to OpenRouter');
+      }
+    } else {
+      debugPrint('Local Cactus not initialized, using OpenRouter');
+    }
+
+    // Fallback to OpenRouter
     try {
-      final prompt = '''You are a helpful assistant that summarizes notifications concisely.
+      debugPrint('Using OpenRouter fallback for summarization');
+      return await OpenRouterService.summarize(
+        notifications.map((n) => '• $n').toList(),
+      );
+    } catch (e) {
+      debugPrint('OpenRouter fallback failed: $e');
+      return 'Unable to generate summary. Both local and cloud AI failed.';
+    }
+  }
+
+  /// Internal method for local Cactus summarization
+  static Future<String?> _summarizeWithLocalModel(
+    List<String> notifications,
+  ) async {
+    try {
+      final prompt =
+          '''You are a helpful assistant that summarizes notifications concisely.
 
 Notifications:
 ${notifications.take(10).join('\n')} ${notifications.length > 10 ? '\n... and ${notifications.length - 10} more' : ''}
@@ -88,22 +123,19 @@ Provide a brief, helpful summary in 1-2 sentences:''';
 
       final result = await _model!.generateCompletion(
         messages: [ChatMessage(content: prompt, role: 'user')],
-        params: CactusCompletionParams(
-          maxTokens: 256,
-          temperature: 0.7,
-        ),
+        params: CactusCompletionParams(maxTokens: 256, temperature: 0.7),
       );
 
       if (result.success) {
-        debugPrint('Generated summary for ${notifications.length} notifications');
+        debugPrint(
+          'Generated summary for ${notifications.length} notifications',
+        );
         return result.response.trim();
-      } else {
-        debugPrint('Error generating summary: generation failed');
-        return 'Unable to generate summary at this time.';
       }
+      return null;
     } catch (e) {
-      debugPrint('Error generating summary: $e');
-      return 'Unable to generate summary at this time.';
+      debugPrint('Local model error: $e');
+      return null;
     }
   }
 

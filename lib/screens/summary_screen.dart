@@ -3,6 +3,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:android_intent_plus/android_intent.dart';
 import '../models/notification_item.dart';
+import '../services/deep_link_service.dart';
+import '../services/cactus_service.dart';
 
 class SummaryScreen extends StatelessWidget {
   const SummaryScreen({super.key});
@@ -22,6 +24,16 @@ class SummaryScreen extends StatelessWidget {
   Future<void> _clearAll() async {
     final box = Hive.box<NotificationItem>('notifications');
     await box.clear();
+  }
+
+  Future<String> _generateSummary(Box<NotificationItem> box) async {
+    if (box.isEmpty) return '';
+
+    final notifications = box.values
+        .map((n) => '${n.title}: ${n.body}')
+        .toList();
+
+    return await CactusAIService.summarizeNotifications(notifications);
   }
 
   @override
@@ -89,52 +101,159 @@ class SummaryScreen extends StatelessWidget {
                 .add(notification);
           }
 
-          return ListView.builder(
-            itemCount: groupedNotifications.length,
-            itemBuilder: (context, index) {
-              final packageName = groupedNotifications.keys.elementAt(index);
-              final notifications = groupedNotifications[packageName]!;
-
-              // Sort by timestamp (newest first)
-              notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: ExpansionTile(
-                  leading: const Icon(Icons.apps),
-                  title: Text(packageName.split('.').last),
-                  subtitle: Text('${notifications.length} notification(s)'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.open_in_new),
-                    onPressed: () => _openApp(packageName),
-                  ),
-                  children: notifications.map((notification) {
-                    return ListTile(
-                      title: Text(notification.title),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (notification.body.isNotEmpty)
-                            Text(
-                              notification.body,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+          return Column(
+            children: [
+              // AI Summary Card
+              if (box.isNotEmpty)
+                Card(
+                  margin: const EdgeInsets.all(8),
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DateFormat(
-                              'MMM d, h:mm a',
-                            ).format(notification.timestamp),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                      isThreeLine: notification.body.isNotEmpty,
-                    );
-                  }).toList(),
+                            const SizedBox(width: 8),
+                            Text(
+                              'AI Summary',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        FutureBuilder<String>(
+                          future: _generateSummary(box),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Row(
+                                children: [
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text('Generating summary...'),
+                                ],
+                              );
+                            }
+                            return Text(
+                              snapshot.data ?? 'Unable to generate summary',
+                              style: const TextStyle(height: 1.5),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              );
-            },
+              Expanded(
+                child: ListView.builder(
+                  itemCount: groupedNotifications.length,
+                  itemBuilder: (context, index) {
+                    final packageName = groupedNotifications.keys.elementAt(
+                      index,
+                    );
+                    final notifications = groupedNotifications[packageName]!;
+
+                    // Sort by timestamp (newest first)
+                    notifications.sort(
+                      (a, b) => b.timestamp.compareTo(a.timestamp),
+                    );
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      child: ExpansionTile(
+                        leading: const Icon(Icons.apps),
+                        title: Text(packageName.split('.').last),
+                        subtitle: Text(
+                          '${notifications.length} notification(s)',
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.open_in_new),
+                          onPressed: () => _openApp(packageName),
+                        ),
+                        children: notifications.map((notification) {
+                          // Parse deep link actions
+                          final actions = DeepLinkService.parseActions(
+                            notification.title,
+                            notification.body,
+                          );
+
+                          return ListTile(
+                            title: Text(notification.title),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (notification.body.isNotEmpty)
+                                  Text(
+                                    notification.body,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  DateFormat(
+                                    'MMM d, h:mm a',
+                                  ).format(notification.timestamp),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                // Deep link actions as text links
+                                if (actions.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: actions.map((action) {
+                                      return InkWell(
+                                        onTap: () =>
+                                            DeepLinkService.executeAction(
+                                              action,
+                                            ),
+                                        child: Text(
+                                          action.label,
+                                          style: TextStyle(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                            decoration:
+                                                TextDecoration.underline,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            isThreeLine:
+                                notification.body.isNotEmpty ||
+                                actions.isNotEmpty,
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
